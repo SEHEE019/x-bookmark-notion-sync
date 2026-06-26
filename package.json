@@ -1,0 +1,16 @@
+{
+  "name": "x-bookmark-notion-sync",
+  "version": "1.0.0",
+  "description": "X 북마크를 매일 Notion DB로 동기화",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node main.js",
+    "auth": "node getRefreshToken.js"
+  },
+  "dependencies": {
+    "@notionhq/client": "2.2.15",
+    "dotenv": "^16.4.5",
+    "libsodium-wrappers": "^0.7.16"
+  }
+}
