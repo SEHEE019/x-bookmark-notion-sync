@@ -30,5 +30,6 @@ jobs:
           X_USER_ID: ${{ secrets.X_USER_ID }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # refresh_token 자동갱신용 (repo secrets 쓰기 권한 PAT)
           GH_PAT: ${{ secrets.GH_PAT }}

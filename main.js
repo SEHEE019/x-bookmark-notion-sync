@@ -18,6 +18,7 @@
  * 필요 환경변수:
  *   X_CLIENT_ID, X_CLIENT_SECRET, X_REFRESH_TOKEN, X_USER_ID
  *   NOTION_API_KEY, NOTION_DATABASE_ID
+ *   ANTHROPIC_API_KEY   (제목/분류 자동 생성용)
  *
  * GitHub Actions 에서 토큰 자동저장에 추가로 필요:
  *   GH_PAT            (repo secrets 쓰기 권한 있는 Personal Access Token)
@@ -41,6 +42,8 @@ const {
   X_USER_ID,
   NOTION_API_KEY,
   NOTION_DATABASE_ID,
+  // Claude 제목 생성용
+  ANTHROPIC_API_KEY,
   // GitHub Actions 자동저장용
   GH_PAT,
   GITHUB_REPOSITORY,
@@ -55,6 +58,7 @@ function assertEnv() {
     X_USER_ID,
     NOTION_API_KEY,
     NOTION_DATABASE_ID,
+    ANTHROPIC_API_KEY,
   };
   const missing = Object.entries(required)
     .filter(([, v]) => !v)
@@ -263,6 +267,159 @@ async function existsInNotion(postId) {
 }
 
 // ============================================================
+//  4-b) Claude 로 제목 + 콘텐츠태그 + 처리분류 생성
+// ============================================================
+
+// 콘텐츠 태그 (제목 [ ] 안에 들어가는 것)
+const VALID_TAGS = [
+  "모델", "제품", "기능", "도구", "오픈소스", "에이전트", "벤치마크",
+  "논문", "가이드", "프롬프트", "강의", "투자", "업계", "관점",
+  "윤리", "사례", "자료",
+];
+
+// 처리분류 (Notion '분류' Select 값과 일치해야 함)
+const VALID_ACTIONS = [
+  "테스트(개발자)", "테스트(비개발자)", "조사", "코멘트",
+];
+
+const TITLE_PROMPT = `너는 우리 회사 AI TF의 북마크 정리 담당이다.
+우리 팀 목적: 전체 AI 동향·시장 흐름을 파악하고, 그중 "우리가 직접 개발해서 업무에 쓸 수 있는 것"을 골라 테스트한다.
+아래 X(트위터) 원문을 읽고 JSON 하나만 출력하라.
+
+[출력: 반드시 아래 JSON 형식만. 다른 텍스트·설명·마크다운 금지]
+{"title":"[콘텐츠태그] 핵심요약","action":"처리분류","warn":true|false}
+
+[title 규칙]
+- 형식: "[콘텐츠태그] 핵심"  (예: "[모델] Claude Fable 5 공개 (추론 85%↑)")
+- 핵심은 한국어, 40자 이내, 명사구 중심. 서술형 문장 금지.
+- 제품/모델/도구명은 원문 표기 그대로. 그 외는 한국어.
+- 부가정보는 괄호로 압축. 이모지/해시태그/URL 제거(수치강조 ⭐ 정도만 예외).
+
+[콘텐츠태그 — 위에서부터 우선순위, 첫 매칭]
+모델 / 제품 / 기능 / 도구 / 오픈소스 / 에이전트 / 벤치마크 / 논문 /
+가이드 / 프롬프트 / 강의 / 투자 / 업계 / 관점 / 윤리 / 사례 / 자료
+- 출시인데 모델/제품 애매 → 아키텍처·가중치 중심이면 모델, 쓰는 앱 중심이면 제품.
+- 오픈소스 도구는 오픈소스 우선, 오픈 여부 불명이면 도구.
+- 개인 발언·전망은 관점, 실제로 만든 것·써본 것은 사례.
+
+[action 처리분류 — 아래 순서대로 판정, 첫 매칭 채택]
+1) 디자인·영상·이미지·3D·CAD·모델링 등 시각/모델링 계열이면 → "조사"
+   (우리 회사엔 직접 필요 없으므로 테스트 안 함. 시각 도구인데 API로 개발에 붙일 수 있어 애매하면 "조사"로 두어라 — 사람이 나중에 수정.)
+2) 우리가 직접 개발/적용해 업무에 쓸 수 있을 법한 것이면 → "테스트"
+   - 코딩·개발 환경이 필요한 라이브러리·API·CLI·SDK·MCP·코드 → "테스트(개발자)"
+   - 코딩 없이 바로 써볼 수 있는 앱·서비스·프롬프트·자동화 도구 → "테스트(비개발자)"
+3) 시장 흐름·업계 동향·기업 전략·투자·모델 릴리즈 등 "흐름 파악"용이면 → "조사"
+4) 위 어디에도 안 맞고 읽고 의견만 남기면 되는 개인 관점·에세이·전망 → "코멘트"
+- 애매하면 "조사"로 두어라(사람이 수정하기 쉽게).
+
+[warn 렉카 판정 — 톤 아님, 아래 행동 신호만 true]
+1) 저장·클릭 유도가 본체("북마크해라","안 보면 손해","$숫자 강의보다")
+2) 유료·셀스 유도(결제/DM 리드 파밍/"팔로우하면 무료로")
+위 중 하나라도 명확하면 true. 애매하면 false.
+
+원문:
+`;
+
+async function generateTitle(text) {
+  const content = (text || "").trim();
+  // 본문이 거의 없으면 API 호출 없이 폴백
+  if (content.length < 3) {
+    return { title: "[자료] (내용 없음)", tag: "자료", action: "조사", warn: false };
+  }
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 200,
+        messages: [{ role: "user", content: TITLE_PROMPT + content }],
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(`Claude API ${res.status}: ${JSON.stringify(data)}`);
+    }
+
+    // 응답 텍스트 추출
+    let raw = "";
+    if (Array.isArray(data.content)) {
+      raw = data.content
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+    }
+
+    return parseResult(raw, content);
+  } catch (e) {
+    console.error(`  ! 제목 생성 실패, 폴백 사용:`, e.message);
+    return {
+      title: `[자료] ${content.slice(0, 40)}`,
+      tag: "자료",
+      action: "조사",
+      warn: false,
+    };
+  }
+}
+
+// Claude JSON 응답을 파싱해서 title / tag / action / warn 으로 분해
+function parseResult(raw, fallbackText) {
+  let title, action, warn;
+
+  try {
+    // 혹시 ```json 펜스가 붙어 오면 제거
+    const cleaned = raw.replace(/```json|```/g, "").trim();
+    // 첫 { 부터 마지막 } 까지만 추출 (앞뒤 잡텍스트 방어)
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    const jsonStr =
+      start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+    const obj = JSON.parse(jsonStr);
+    title = (obj.title || "").toString().replace(/\n/g, " ").trim();
+    action = (obj.action || "").toString().trim();
+    warn = obj.warn === true;
+  } catch (e) {
+    // JSON 파싱 실패 시 폴백
+    return {
+      title: `[자료] ${(fallbackText || "").slice(0, 40)}`,
+      tag: "자료",
+      action: "조사",
+      warn: false,
+    };
+  }
+
+  // 콘텐츠 태그 추출 ([ ] 안)
+  const m = title.match(/\[([^\]]+)\]/);
+  let tag = m ? m[1].trim() : null;
+  if (!tag || !VALID_TAGS.includes(tag)) {
+    tag = "자료";
+  }
+
+  // 처리분류 보정: 허용 목록에 없으면 '조사'
+  if (!VALID_ACTIONS.includes(action)) {
+    action = "조사";
+  }
+
+  // 제목 안전장치
+  if (!title || title.length < 2) {
+    title = `[${tag}] ${(fallbackText || "").slice(0, 40)}`;
+  }
+  // warn 이면 제목 맨 앞에 ⚠️
+  if (warn && !title.startsWith("⚠️")) {
+    title = `⚠️ ${title}`;
+  }
+
+  return { title, tag, action, warn };
+}
+
+// ============================================================
 //  5) Notion 에 새 row 추가
 // ============================================================
 async function addToNotion(bookmark) {
@@ -271,8 +428,9 @@ async function addToNotion(bookmark) {
     bookmark.username || "i"
   }/status/${bookmark.postId}`;
 
-  const titleText =
-    (bookmark.text || "").slice(0, 80) || `(제목 없음) ${bookmark.postId}`;
+  // Claude 로 제목 + 콘텐츠태그 + 처리분류 생성
+  // tag(모델/제품 등)는 제목 [ ] 안에만 쓰이고, 분류 컬럼엔 action 을 넣는다.
+  const { title: titleText, action } = await generateTitle(bookmark.text);
 
   await notion.pages.create({
     parent: { database_id: NOTION_DATABASE_ID },
@@ -288,7 +446,9 @@ async function addToNotion(bookmark) {
       내용: {
         rich_text: [{ text: { content: (bookmark.text || "").slice(0, 1900) } }],
       },
+      분류: { select: { name: action } },
       확인상태: { select: { name: "미확인" } },
+      // 담당자(Person) 는 자동추가 시 비워둠 → 코드에서 건드리지 않음
     },
   });
 }
