@@ -282,6 +282,26 @@ const VALID_ACTIONS = [
   "테스트(개발자)", "테스트(비개발자)", "조사", "코멘트",
 ];
 
+// 테마: 콘텐츠태그(17종) → 상위 테마(8종+기타) 매핑
+// Notion '테마' Select 옵션과 이름이 정확히 일치해야 함
+const THEME_BY_TAG = {
+  모델: "모델·제품", 제품: "모델·제품", 기능: "모델·제품",
+  도구: "도구·활용", 오픈소스: "도구·활용", 에이전트: "도구·활용", 프롬프트: "도구·활용",
+  논문: "연구·논문", 벤치마크: "연구·논문",
+  사례: "사례·적용",
+  투자: "산업·비즈니스", 업계: "산업·비즈니스",
+  윤리: "사회·정책",
+  강의: "교육·학습", 가이드: "교육·학습",
+  관점: "관점·칼럼",
+  자료: "기타",
+};
+const FALLBACK_THEME = "기타";
+
+// 목록 밖 값이 와도 노션에 새 옵션이 생기지 않도록 항상 이 함수를 거친다
+function themeOfTag(tag) {
+  return THEME_BY_TAG[tag] || FALLBACK_THEME;
+}
+
 const TITLE_PROMPT = `너는 우리 회사 AI TF의 북마크 정리 담당이다.
 우리 팀 목적: 전체 AI 동향·시장 흐름을 파악하고, 그중 "우리가 직접 개발해서 업무에 쓸 수 있는 것"을 골라 테스트한다.
 아래 X(트위터) 원문을 읽고 JSON 하나만 출력하라.
@@ -429,8 +449,9 @@ async function addToNotion(bookmark) {
   }/status/${bookmark.postId}`;
 
   // Claude 로 제목 + 콘텐츠태그 + 처리분류 생성
-  // tag(모델/제품 등)는 제목 [ ] 안에만 쓰이고, 분류 컬럼엔 action 을 넣는다.
-  const { title: titleText, action } = await generateTitle(bookmark.text);
+  // tag(모델/제품 등)는 제목 [ ] 안에 들어가고, 동시에 상위 테마로 매핑해 '테마' 컬럼에 기록한다.
+  const { title: titleText, tag, action } = await generateTitle(bookmark.text);
+  const theme = themeOfTag(tag);
 
   await notion.pages.create({
     parent: { database_id: NOTION_DATABASE_ID },
@@ -447,6 +468,7 @@ async function addToNotion(bookmark) {
         rich_text: [{ text: { content: (bookmark.text || "").slice(0, 1900) } }],
       },
       분류: { select: { name: action } },
+      테마: { select: { name: theme } },
       확인상태: { select: { name: "미확인" } },
       // 담당자(Person) 는 자동추가 시 비워둠 → 코드에서 건드리지 않음
     },
