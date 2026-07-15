@@ -1,0 +1,65 @@
+# .github/workflows/dashboard-refresh.yml
+# ─────────────────────────────────────────────────────────────
+# 대시보드 갱신 전용 워크플로
+#  · 자동: 평일 09/12/15/18시 (KST) 마다 제외 규칙 실행 + data.json 갱신
+#  · 수동: 저장소 → Actions 탭 → "대시보드 갱신" → Run workflow 버튼
+#         (노션에서 상태를 바꾼 직후 바로 대시보드에 반영하고 싶을 때)
+#
+# 수집(main.js) 워크플로와 분리한 이유:
+#  · X 토큰 문제로 수집이 실패해도 대시보드 갱신은 계속 돌게
+#  · 수동 갱신 버튼을 눌러도 X API 를 건드리지 않게 (토큰 1회용 이슈 예방)
+#
+# 필요 Secrets: NOTION_API_KEY, NOTION_DATABASE_ID (이미 등록돼 있음)
+# ─────────────────────────────────────────────────────────────
+name: 대시보드 갱신
+
+on:
+  workflow_dispatch:          # 수동 실행 버튼
+  schedule:
+    - cron: "0 0,3,6,9 * * 1-5"   # 평일 09/12/15/18시 KST (UTC+9 환산)
+
+permissions:
+  contents: write             # data.json 커밋을 위해 필요 (별도 PAT 불필요)
+
+concurrency:
+  group: dashboard-refresh
+  cancel-in-progress: false   # 겹치면 순서대로 (노션 API 보호)
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node 준비
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 의존성 설치
+        run: npm install @notionhq/client@2.2.15 dotenv
+
+      - name: 기한 지난 건 자동 제외
+        run: node exclude_expired.js
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          # 기준 일수를 바꾸려면 아래 주석 해제 후 숫자 수정
+          # DAYS_COMMENT: "7"
+          # DAYS_RESEARCH: "21"
+          # DAYS_TEST: "21"
+
+      - name: data.json 내보내기
+        run: node export_dashboard.js
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+
+      - name: 변경분 커밋
+        run: |
+          git config user.name "bookmark-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add docs/data.json
+          git diff --cached --quiet || git commit -m "chore: 대시보드 데이터 갱신"
+          git push

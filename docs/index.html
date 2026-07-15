@@ -125,6 +125,8 @@ h2{font-size:1.15rem; font-weight:700; letter-spacing:-.02em; margin-bottom:.35r
 .badge.done{color:var(--st-done); background:var(--st-done-bg)}
 .badge.out{color:var(--st-out); background:var(--st-out-bg)}
 .badge.expiring{color:#ed4956; background:#ffe9eb}
+.badge.active.stale{color:#ed4956; background:#ffe9eb}
+body.dark .badge.active.stale{background:#3a1216}
 body.dark .badge.expiring{background:#3a1216}
 .card h3{font-size:calc(.95rem * var(--card-scale)); font-weight:600; line-height:1.4; letter-spacing:-.01em}
 .card .desc{font-size:calc(.82rem * var(--card-scale)); color:var(--ink-soft); line-height:1.55; flex:1}
@@ -505,6 +507,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 /* ================= 카드 렌더 ================= */
 function cardHTML(it, actions=''){
   const exp = isExpiring(it) ? `<span class="badge expiring">제외 예정 · ${days(it.pub)}일 경과</span>` : '';
+  const stBadge = (it.st==='active' && it.sel)
+    ? `<span class="badge active${days(it.sel)>=15?' stale':''}">진행 ${days(it.sel)}일째</span>`
+    : `<span class="badge ${it.st}">${stName[it.st]}</span>`;
   const own = it.who ? `<span class="owner"><span class="dot" style="background:${member(it.who).color}">${member(it.who).name.slice(1)}</span>${member(it.who).name}</span>` : '';
   const dates = [
     `게시 ${fmt(it.pub)}`,
@@ -514,7 +519,7 @@ function cardHTML(it, actions=''){
   return `<article class="card">
     <div class="card-top">
       <span class="cat" data-c="${it.cat}">${it.cat}</span>
-      <span style="display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end">${exp}<span class="badge ${it.st}">${stName[it.st]}</span></span>
+      <span style="display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end">${exp}${stBadge}</span>
     </div>
     <h3>${it.t}</h3>
     <p class="desc">${it.d}</p>
@@ -557,7 +562,12 @@ function renderTeam(){
           p = mine.filter(i=>i.st==='active').length,
           d = mine.filter(i=>i.st==='done').length;
     const tot = Math.max(a+p+d,1);
-    const detail = mine.map(it=>`<li><span class="badge ${it.st}">${stName[it.st]}</span> ${it.t} <span class="mono" style="color:var(--ink-faint);font-size:.72rem">${it.cat}</span></li>`).join('') || '<li>배정된 항목이 없습니다.</li>';
+    const detail = mine.map(it=>{
+      const b = (it.st==='active' && it.sel)
+        ? `<span class="badge active${days(it.sel)>=15?' stale':''}">진행 ${days(it.sel)}일째</span>`
+        : `<span class="badge ${it.st}">${stName[it.st]}</span>`;
+      return `<li>${b} ${it.t} <span class="mono" style="color:var(--ink-faint);font-size:.72rem">${it.cat}</span></li>`;
+    }).join('') || '<li>배정된 항목이 없습니다.</li>';
     return `<div class="member ${expandedMember===m.id?'expanded':''}" onclick="toggleMember('${m.id}')">
       <div class="member-head">
         <span class="dot" style="background:${m.color}">${m.name.slice(1)}</span>
