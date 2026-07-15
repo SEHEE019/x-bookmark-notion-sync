@@ -367,7 +367,7 @@ footer{
 <!-- 운영 값 사이드 패널 -->
 <aside id="panel" aria-label="운영 값 패널">
   <h3>운영 값</h3>
-  <p class="p-sub">조절하면 화면 전체에 즉시 반영됩니다. 확정되면 이 값이 자동 제외 규칙의 기준이 됩니다.</p>
+  <p class="p-sub">화면 표시용 미리보기 값입니다. 실제 자동 제외 규칙(매일 실행)의 기준은 코멘트 7일 / 조사·테스트 21일로 운영 중입니다.</p>
 
   <div class="p-group">
     <label>제외 기준 · 코멘트 <output id="oC">7일</output></label>
@@ -375,12 +375,12 @@ footer{
     <p class="p-note">게시일로부터 이 일수가 지난 미선택 코멘트는 제외 예정으로 표시됩니다.</p>
   </div>
   <div class="p-group">
-    <label>제외 기준 · 조사 <output id="oR">14일</output></label>
-    <input type="range" min="5" max="30" value="14" id="rR">
+    <label>제외 기준 · 조사 <output id="oR">21일</output></label>
+    <input type="range" min="5" max="30" value="21" id="rR">
   </div>
   <div class="p-group">
-    <label>제외 기준 · 테스트 <output id="oT">14일</output></label>
-    <input type="range" min="5" max="30" value="14" id="rT">
+    <label>제외 기준 · 테스트 <output id="oT">21일</output></label>
+    <input type="range" min="5" max="30" value="21" id="rT">
     <p class="p-note">테스트(비개발자)와 테스트(개발자) 공통 적용.</p>
   </div>
 
