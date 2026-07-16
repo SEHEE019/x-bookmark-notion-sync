@@ -38,7 +38,7 @@ jobs:
           node-version: 20
 
       - name: 의존성 설치
-        run: npm install @notionhq/client@2.2.15 dotenv
+        run: npm install --no-save @notionhq/client@2.2.15 dotenv
 
       - name: 기한 지난 건 자동 제외
         run: node exclude_expired.js
@@ -66,13 +66,17 @@ jobs:
             exit 0
           fi
           git commit -m "chore: 대시보드 데이터 갱신"
+          # 러너에서 생긴 잡변경(npm 등) 정리 — rebase 방해 요소 제거
+          git checkout -- .
           # 실행 중 다른 커밋이 main에 올라온 경우 대비: 당겨온 뒤 푸시, 3회 재시도
           for i in 1 2 3; do
             if ! git pull --rebase origin main; then
-              # data.json 충돌 시 방금 생성한 최신본을 채택
-              git checkout --theirs docs/data.json
-              git add docs/data.json
-              git rebase --continue
+              # rebase 가 실제로 진행 중일 때만 충돌 복구 (data.json 은 최신본 채택)
+              if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+                git checkout --theirs docs/data.json || true
+                git add docs/data.json
+                git rebase --continue || git rebase --abort
+              fi
             fi
             if git push; then
               exit 0
