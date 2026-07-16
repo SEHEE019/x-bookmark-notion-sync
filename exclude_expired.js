@@ -53,6 +53,7 @@ async function main() {
   );
 
   const targets = [];
+  const noDate = [];
   let cursor = undefined;
 
   do {
@@ -60,7 +61,12 @@ async function main() {
       database_id: NOTION_DATABASE_ID,
       start_cursor: cursor,
       page_size: 100,
-      filter: { property: "확인상태", select: { equals: "미확인" } },
+      filter: {
+        or: [
+          { property: "확인상태", select: { equals: "미확인" } },
+          { property: "확인상태", select: { is_empty: true } }, // 초기 마이그레이션 건 (상태 미입력)
+        ],
+      },
     });
 
     for (const page of res.results) {
@@ -68,13 +74,18 @@ async function main() {
       const title = (P["제목"]?.title || []).map((x) => x.plain_text).join("");
       const cat = P["분류"]?.select?.name || "조사";
       const pub = P["게시일"]?.date?.start || P["수집일"]?.date?.start;
-      if (!pub) continue; // 날짜 없는 건은 자동 처리 대상에서 제외 (수동 판단)
+      if (!pub) { noDate.push(title); continue; } // 날짜 없으면 자동 판단 불가 → 수동 처리 목록으로
 
       const age = daysSince(pub);
       if (age > limitOf(cat)) targets.push({ id: page.id, title, cat, age });
     }
     cursor = res.has_more ? res.next_cursor : undefined;
   } while (cursor);
+
+  if (noDate.length) {
+    console.warn(`\n⚠️ 게시일·수집일이 모두 비어 자동 판단이 불가한 건 ${noDate.length}건 — 노션에서 직접 확인 필요:`);
+    for (const t of noDate) console.warn("   · " + t.slice(0, 50));
+  }
 
   if (!targets.length) {
     console.log("✅ 현재 기준으로 제외할 항목이 없습니다.");
