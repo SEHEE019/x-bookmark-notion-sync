@@ -155,6 +155,45 @@ body.dark .badge.expiring{background:#3a1216}
 }
 .chip.on{border-color:var(--accent); color:var(--accent); background:var(--accent-soft)}
 
+/* ---------- 룰렛 ---------- */
+.roulette-wrap{display:flex; gap:2.2rem; flex-wrap:wrap; align-items:flex-start; margin-top:.5rem}
+.wheel-box{position:relative; width:360px; max-width:88vw; margin:0 auto; flex-shrink:0}
+.wheel-pointer{
+  position:absolute; top:-4px; left:50%; transform:translateX(-50%); z-index:5;
+  width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent;
+  border-top:22px solid var(--ink); filter:drop-shadow(0 2px 3px rgba(0,0,0,.25));
+}
+#wheelCanvas{
+  width:100%; height:auto; display:block; border-radius:50%;
+  box-shadow:0 10px 36px rgba(0,0,0,.14);
+}
+.spin-btn{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:6;
+  width:84px; height:84px; border-radius:50%; border:5px solid var(--surface);
+  background:var(--accent); color:#fff; font:inherit; font-weight:900; font-size:1rem;
+  letter-spacing:.06em; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.22);
+  transition:transform .15s, filter .15s;
+}
+.spin-btn:hover:not(:disabled){transform:translate(-50%,-50%) scale(1.07); filter:brightness(1.08)}
+.spin-btn:disabled{opacity:.55; cursor:not-allowed}
+.rou-side{flex:1; min-width:280px}
+.rou-side h3{font-size:.95rem; font-weight:700; margin-bottom:.6rem}
+.rou-legend{list-style:none; display:flex; flex-direction:column; gap:.3rem; margin-bottom:1.4rem}
+.rou-legend li{
+  display:flex; align-items:baseline; gap:.55rem; font-size:.84rem; color:var(--ink-soft);
+  padding:.32rem .5rem; border-radius:8px; background:var(--surface); border:1px solid var(--line);
+}
+.rou-legend .no{
+  flex-shrink:0; width:20px; height:20px; border-radius:50%; color:#fff;
+  font-size:.68rem; font-weight:700; display:flex; align-items:center; justify-content:center;
+  align-self:center;
+}
+.rou-legend .tt{flex:1; line-height:1.45}
+.rou-legend .pub{flex-shrink:0; font-size:.7rem; color:var(--ink-faint)}
+@keyframes rouPop{0%{opacity:0; transform:scale(.92) translateY(8px)}60%{transform:scale(1.02)}100%{opacity:1; transform:none}}
+#rouResult .card{animation:rouPop .45s ease; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft), 0 10px 28px rgba(0,149,246,.12)}
+#rouResult h3.win{font-size:1.05rem; margin:.2rem 0 .7rem}
+
 /* ---------- 팀원별 현황 ---------- */
 .team-row{display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem; margin-top:.5rem}
 .member{
@@ -279,6 +318,7 @@ footer{
   <div class="brand">AITF 북마크<small>BOOKMARK OPS · PHASE 1</small></div>
   <nav>
     <button data-v="board" class="on">내 선택 보드</button>
+    <button data-v="roulette">🎡 룰렛</button>
     <button data-v="dash">대시보드</button>
     <button data-v="admin" id="adminTab" style="display:none">관리자</button>
   </nav>
@@ -310,6 +350,25 @@ footer{
     <h2 style="margin-top:2.4rem">진행 중인 내 항목</h2>
     <p class="sub">처리를 마치면 완료 버튼을 누르세요. 완료일이 기록됩니다.</p>
     <div class="cards" id="myActiveCards"></div>
+  </section>
+
+  <!-- ===== 룰렛 ===== -->
+  <section class="view" id="v-roulette">
+    <h2>🎡 북마크 룰렛</h2>
+    <p class="sub">뭘 볼지 고르기 어렵다면 운명에 맡기세요. <b>가장 최근에 수집된 미배정 소식</b>들로 룰렛을 돌려 오늘 볼 소식을 배정받습니다.</p>
+    <div class="chips" id="rouChips"></div>
+    <div class="roulette-wrap">
+      <div class="wheel-box">
+        <div class="wheel-pointer"></div>
+        <canvas id="wheelCanvas" width="720" height="720"></canvas>
+        <button class="spin-btn" id="spinBtn" onclick="spinWheel()">SPIN</button>
+      </div>
+      <div class="rou-side">
+        <h3>룰렛 후보 <small style="font-weight:500;color:var(--ink-faint)">· 최신순</small></h3>
+        <ol class="rou-legend" id="rouLegend"></ol>
+        <div id="rouResult"></div>
+      </div>
+    </div>
   </section>
 
   <!-- ===== 관리자 ===== -->
@@ -459,22 +518,51 @@ const WORKER_URL  = '';   // 예: 'https://aitf-bookmark.계정.workers.dev'
 const TEAM_TOKEN  = '';   // Worker 의 TEAM_TOKEN 과 동일한 값
 
 let DATA_MODE = '샘플';
-async function loadData(){
+let lastGeneratedAt = null;
+
+/* 화면에서 바꾼 상태(룰렛 배정·선택·완료)를 기록해 두고,
+   자동 갱신 시 노션이 아직 그 항목을 반영하지 않았으면 로컬 변경을 유지한다. */
+const localTouched = new Map(); // id → {base:{st,who}, over:{...변경분}}
+function touchLocal(it, patch){
+  if(!localTouched.has(it.id)) localTouched.set(it.id, {base:{st:it.st, who:it.who||null}, over:{}});
+  Object.assign(localTouched.get(it.id).over, patch);
+  Object.assign(it, patch);
+}
+
+function applyData(d){
+  ITEMS = d.items.map(it=>{
+    const loc = localTouched.get(it.id);
+    if(loc){
+      // 노션 상태가 변경 당시 그대로면 아직 반영 전 → 로컬 변경 유지
+      if(it.st===loc.base.st && (it.who||null)===loc.base.who) return {...it, ...loc.over};
+      localTouched.delete(it.id); // 노션이 갱신됨 → 노션 우선
+    }
+    return it;
+  });
+  TODAY = new Date(); TODAY.setHours(0,0,0,0);
+  DATA_MODE = '실데이터 · ' + new Date(d.generatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' 동기화 · ' + d.count + '건';
+  const f = document.querySelector('footer');
+  if(f) f.textContent = DATA_MODE + ' — 상태 변경은 카드의 노션 링크에서. 이 화면은 5분마다(탭 복귀 시 즉시) 자동 갱신됩니다.';
+}
+
+async function refreshData(first){
   try{
     const r = await fetch('data.json', {cache:'no-store'});
     if(!r.ok) return;
     const d = await r.json();
     if(!d.items || !d.items.length) return;
-    ITEMS = d.items;
-    TODAY = new Date(); TODAY.setHours(0,0,0,0);
-    DATA_MODE = '실데이터 · ' + new Date(d.generatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' 동기화 · ' + d.count + '건';
+    if(d.generatedAt === lastGeneratedAt) return; // 새 데이터 없음
+    lastGeneratedAt = d.generatedAt;
+    applyData(d);
+    if(!first && me && !spinning){
+      renderAll();
+      toast('🔄 대시보드가 최신 데이터로 갱신됐어요');
+    }
   }catch(e){ /* 로컬에서 열면 fetch 불가 → 샘플 모드 유지 */ }
-  const f = document.querySelector('footer');
-  if(f) f.textContent = DATA_MODE.startsWith('실데이터')
-    ? DATA_MODE + ' — 상태 변경은 카드의 노션 링크에서. 다음 자동 동기화 때 화면에 반영됩니다.'
-    : f.textContent;
 }
-const dataReady = loadData();
+const dataReady = refreshData(true);
+setInterval(()=>refreshData(false), 5*60*1000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshData(false); });
 
 /* ================= 신원 게이트 ================= */
 $('#gateGrid').innerHTML = MEMBERS.map(m=>`
@@ -620,7 +708,7 @@ async function pick(id){
   const it = ITEMS.find(i=>i.id==id);
   const res = await writeNotion(it.id, 'pick');
   if(res.error){ toast('노션 기록 실패 — 잠시 후 다시 시도해 주세요'); return; }
-  it.st='active'; it.sel = TODAY.toISOString().slice(0,10);
+  touchLocal(it, {st:'active', sel: TODAY.toISOString().slice(0,10)});
   toast(res.local ? `선택했습니다 (화면만 · 샘플 모드)` : `선택했습니다 — 노션에 '진행'과 선택일이 기록됐습니다`);
   renderAll();
 }
@@ -628,9 +716,135 @@ async function finish(id){
   const it = ITEMS.find(i=>i.id==id);
   const res = await writeNotion(it.id, 'finish');
   if(res.error){ toast('노션 기록 실패 — 잠시 후 다시 시도해 주세요'); return; }
-  it.st='done'; it.fin = TODAY.toISOString().slice(0,10);
+  touchLocal(it, {st:'done', fin: TODAY.toISOString().slice(0,10)});
   toast(res.local ? `완료 처리했습니다 (화면만 · 샘플 모드)` : `완료! 노션에 완료일이 기록됐습니다`);
   renderAll();
+}
+
+/* ================= 룰렛 ================= */
+let rouletteN = 8, rouletteCat = '전체', wheelRotation = 0, spinning = false;
+
+function rouletteCandidates(){
+  let list = ITEMS.filter(it=>it.st==='unread' && !it.who);
+  if(rouletteCat!=='전체') list = list.filter(it=>it.cat===rouletteCat);
+  return list.sort((a,b)=> new Date(b.pub||0) - new Date(a.pub||0)).slice(0, rouletteN);
+}
+
+/* "[태그] 제목" → 휠에 들어갈 짧은 라벨 */
+function rouLabel(it){
+  const m = (it.t||'').match(/^\s*(?:⚠️\s*)?\[([^\]]+)\]\s*(.*)/);
+  return (m ? m[2] : it.t || '').trim();
+}
+
+function fitText(ctx, text, maxW){
+  if(ctx.measureText(text).width <= maxW) return text;
+  while(text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+  return text + '…';
+}
+
+function drawWheel(items){
+  const cv = $('#wheelCanvas'); if(!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, R = W/2;
+  ctx.clearRect(0,0,W,W);
+
+  if(items.length < 2){
+    ctx.beginPath(); ctx.arc(R,R,R-8,0,Math.PI*2);
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--st-unread-bg') || '#f2f2f2';
+    ctx.fill();
+    ctx.fillStyle = '#8e8e8e'; ctx.font = '500 30px "Noto Sans KR",sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(items.length ? '후보가 1건뿐이에요' : '돌릴 후보가 없어요', R, R-70);
+    return;
+  }
+
+  const seg = 2*Math.PI/items.length;
+  items.forEach((it,i)=>{
+    const start = -Math.PI/2 + i*seg;
+    ctx.beginPath(); ctx.moveTo(R,R); ctx.arc(R,R,R-8,start,start+seg); ctx.closePath();
+    ctx.fillStyle = themeColor[themeOf(it)] || '#9a9a9a';
+    ctx.fill();
+    if(i%2){ ctx.fillStyle = 'rgba(0,0,0,.10)'; ctx.fill(); } /* 인접 동색 구분 */
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 3; ctx.stroke();
+
+    ctx.save();
+    ctx.translate(R,R); ctx.rotate(start + seg/2);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#fff';
+    ctx.font = '700 26px "Noto Sans KR",sans-serif';
+    ctx.fillText(fitText(ctx, (i+1) + '. ' + rouLabel(it), R-140), R-30, 10);
+    ctx.restore();
+  });
+  ctx.beginPath(); ctx.arc(R,R,74,0,Math.PI*2);
+  ctx.fillStyle = '#ffffff'; ctx.fill();
+}
+
+function renderRoulette(){
+  if(spinning) return;
+  const cats = ['전체','테스트(비개발자)','조사','테스트(개발자)','코멘트'];
+  const counts = [6,8,10,12];
+  $('#rouChips').innerHTML =
+    cats.map(c=>`<button class="chip ${rouletteCat===c?'on':''}" onclick="setRouCat('${c}')">${c}</button>`).join('') +
+    '<span style="flex-basis:100%"></span>' +
+    counts.map(n=>`<button class="chip ${rouletteN===n?'on':''}" onclick="setRouN(${n})">최신 ${n}건</button>`).join('');
+
+  const items = rouletteCandidates();
+  const cv = $('#wheelCanvas');
+  wheelRotation = 0; cv.style.transition = 'none'; cv.style.transform = 'rotate(0deg)';
+  drawWheel(items);
+  $('#spinBtn').disabled = items.length < 2;
+
+  $('#rouLegend').innerHTML = items.map((it,i)=>`
+    <li>
+      <span class="no" style="background:${themeColor[themeOf(it)]||'#9a9a9a'}">${i+1}</span>
+      <span class="tt">${it.t}</span>
+      <span class="pub">${fmt(it.pub)}</span>
+    </li>`).join('') || '<li style="border:none;background:none">미배정 소식이 없습니다. 다음 동기화를 기다려 주세요.</li>';
+}
+function setRouCat(c){ rouletteCat = c; $('#rouResult').innerHTML=''; renderRoulette(); }
+function setRouN(n){ rouletteN = n; $('#rouResult').innerHTML=''; renderRoulette(); }
+
+function spinWheel(){
+  if(spinning) return;
+  const items = rouletteCandidates();
+  if(items.length < 2){ toast('룰렛을 돌리려면 후보가 2건 이상 필요해요'); return; }
+  spinning = true;
+  $('#rouResult').innerHTML = '';
+  $('#spinBtn').disabled = true;
+
+  const win = Math.floor(Math.random()*items.length);
+  const segDeg = 360/items.length;
+  const center = win*segDeg + segDeg/2;                    /* 당첨 칸 중심(시계방향, 12시 기준) */
+  const jitter = (Math.random()-0.5)*segDeg*0.6;
+  const delta = ((-center - wheelRotation) % 360 + 360) % 360;
+  wheelRotation += 360*5 + delta + jitter;
+
+  const cv = $('#wheelCanvas');
+  cv.style.transition = 'transform 4.4s cubic-bezier(.12,.65,.05,1)';
+  cv.style.transform = `rotate(${wheelRotation}deg)`;
+
+  setTimeout(()=>{
+    spinning = false;
+    $('#spinBtn').disabled = false;
+    showRouletteResult(items[win]);
+    toast('🎉 당첨! ' + rouLabel(items[win]));
+  }, 4600);
+}
+
+function showRouletteResult(it){
+  const action = it.st==='unread'
+    ? `<button class="pick-btn" onclick="rouletteAssign('${it.id}')">🎯 이 소식, 내가 맡을게요</button>`
+    : (it.notionUrl ? `<a class="pick-btn" style="display:block;text-align:center;text-decoration:none" href="${it.notionUrl}" target="_blank" rel="noopener">노션에서 담당자 지정 ↗</a>` : '');
+  $('#rouResult').innerHTML = `<h3 class="win">🎉 오늘의 당첨 소식</h3>` + cardHTML(it, action);
+}
+
+function rouletteAssign(id){
+  const it = ITEMS.find(i=>i.id==id);
+  if(!it) return;
+  touchLocal(it, {st:'assigned', who: me.id});
+  toast(it.notionUrl
+    ? `${me.name} 님에게 배정! 노션에서 담당자까지 지정해 주세요`
+    : `${me.name} 님에게 배정했습니다 🎉`);
+  renderAll();
+  showRouletteResult(it);
 }
 
 /* ================= 관리자 ================= */
@@ -707,7 +921,7 @@ function renderAdmin(){
 function assign(id, who){
   if(!who) return;
   const it = ITEMS.find(i=>i.id==id);
-  it.st='assigned'; it.who=who;
+  touchLocal(it, {st:'assigned', who});
   toast(`${member(who).name} 님에게 배정했습니다`);
   renderAll();
 }
@@ -726,7 +940,7 @@ $('#rT').oninput = e=>{ RULE.테스트=+e.target.value; $('#oT').textContent=e.t
 $('#rS').oninput = e=>{ document.documentElement.style.setProperty('--card-scale', e.target.value/100); $('#oS').textContent=e.target.value+'%'; };
 $('#darkT').onchange = e=> document.body.classList.toggle('dark', e.target.checked);
 
-function renderAll(){ renderDash(); renderBoard(); renderAdmin(); }
+function renderAll(){ renderDash(); renderBoard(); renderRoulette(); renderAdmin(); }
 </script>
 </body>
 </html>
