@@ -513,8 +513,9 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 function fmt(d){ const x=new Date(d); return (x.getMonth()+1)+'월 '+x.getDate()+'일'; }
 
 /* ================= 실데이터 로딩 ================= */
-/* Worker 연동 설정 — 비워두면(샘플/조회 전용) 기존 동작 유지 */
-const WORKER_URL  = '';   // 예: 'https://aitf-bookmark.계정.workers.dev'
+/* Worker 연동 설정 — 비워두면(샘플/조회 전용) 기존 동작 유지
+   배포 방법은 저장소의 worker/README.md 참고 */
+const WORKER_URL  = '';   // 예: 'https://aitf-bookmark-writer.계정.workers.dev'
 const TEAM_TOKEN  = '';   // Worker 의 TEAM_TOKEN 과 동일한 값
 
 let DATA_MODE = '샘플';
@@ -694,12 +695,12 @@ function renderBoard(){
   ).join('') || `<div class="empty">진행 중인 항목이 없습니다.</div>`;
 }
 function setCat(c){ catFilter=c; renderBoard(); }
-async function writeNotion(pageId, action){
+async function writeNotion(pageId, action, who){
   if(!WORKER_URL) return {ok:true, local:true}; // Worker 미설정 → 화면만 변경(샘플 모드)
   try{
     const r = await fetch(WORKER_URL, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({token:TEAM_TOKEN, pageId, action})
+      body: JSON.stringify({token:TEAM_TOKEN, pageId, action, who})
     });
     return await r.json();
   }catch(e){ return {error:e.message}; }
@@ -832,17 +833,19 @@ function spinWheel(){
 function showRouletteResult(it){
   const action = it.st==='unread'
     ? `<button class="pick-btn" onclick="rouletteAssign('${it.id}')">🎯 이 소식, 내가 맡을게요</button>`
-    : (it.notionUrl ? `<a class="pick-btn" style="display:block;text-align:center;text-decoration:none" href="${it.notionUrl}" target="_blank" rel="noopener">노션에서 담당자 지정 ↗</a>` : '');
+    : (!WORKER_URL && it.notionUrl ? `<a class="pick-btn" style="display:block;text-align:center;text-decoration:none" href="${it.notionUrl}" target="_blank" rel="noopener">노션에서 담당자 지정 ↗</a>` : '');
   $('#rouResult').innerHTML = `<h3 class="win">🎉 오늘의 당첨 소식</h3>` + cardHTML(it, action);
 }
 
-function rouletteAssign(id){
+async function rouletteAssign(id){
   const it = ITEMS.find(i=>i.id==id);
   if(!it) return;
+  const res = await writeNotion(it.id, 'assign', me.id);
+  if(res.error){ toast('노션 기록 실패 — ' + res.error); return; }
   touchLocal(it, {st:'assigned', who: me.id});
-  toast(it.notionUrl
-    ? `${me.name} 님에게 배정! 노션에서 담당자까지 지정해 주세요`
-    : `${me.name} 님에게 배정했습니다 🎉`);
+  toast(res.local
+    ? (it.notionUrl ? `${me.name} 님에게 배정! 노션에서 담당자까지 지정해 주세요` : `${me.name} 님에게 배정했습니다 🎉`)
+    : `${me.name} 님에게 배정! 노션에 담당자가 기록됐습니다 🎉`);
   renderAll();
   showRouletteResult(it);
 }
@@ -918,11 +921,13 @@ function renderAdmin(){
     </tr>`;
   }).join('');
 }
-function assign(id, who){
+async function assign(id, who){
   if(!who) return;
   const it = ITEMS.find(i=>i.id==id);
+  const res = await writeNotion(it.id, 'assign', who);
+  if(res.error){ toast('노션 기록 실패 — ' + res.error); return; }
   touchLocal(it, {st:'assigned', who});
-  toast(`${member(who).name} 님에게 배정했습니다`);
+  toast(`${member(who).name} 님에게 배정했습니다` + (res.local ? '' : ' — 노션에 기록됨'));
   renderAll();
 }
 function runExcludeRule(){
