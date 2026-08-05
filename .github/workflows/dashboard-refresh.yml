@@ -1,7 +1,8 @@
 # .github/workflows/dashboard-refresh.yml
 # ─────────────────────────────────────────────────────────────
 # 대시보드 갱신 전용 워크플로
-#  · 자동: 평일 09/12/15/18시 (KST) 마다 제외 규칙 실행 + data.json 갱신
+#  · 자동: 평일 09:00~19:30 (KST) 사이 30분 간격으로 제외 규칙 실행 + data.json 갱신
+#    (GitHub 스케줄 특성상 몇 분 지연될 수 있음)
 #  · 수동: 저장소 → Actions 탭 → "대시보드 갱신" → Run workflow 버튼
 #         (노션에서 상태를 바꾼 직후 바로 대시보드에 반영하고 싶을 때)
 #
@@ -16,7 +17,7 @@ name: 대시보드 갱신
 on:
   workflow_dispatch:          # 수동 실행 버튼
   schedule:
-    - cron: "0 0,3,6,9 * * 1-5"   # 평일 09/12/15/18시 KST (UTC+9 환산)
+    - cron: "*/30 0-10 * * 1-5"   # 평일 09:00~19:30 KST, 30분 간격 (UTC+9 환산)
 
 permissions:
   contents: write             # data.json 커밋을 위해 필요 (별도 PAT 불필요)
