@@ -56,6 +56,13 @@ body.dark{
 }
 .gate-card .role{display:block;margin-top:.3rem;font-size:.78rem;color:var(--ink-faint)}
 .gate-note{font-size:.8rem;color:var(--ink-faint)}
+.okta-btn{
+  background:var(--accent); color:#fff; border:none; border-radius:12px;
+  font:inherit; font-weight:700; font-size:1rem; padding:.9rem 2.6rem; cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,149,246,.25); transition:transform .15s, filter .15s;
+}
+.okta-btn:hover{transform:translateY(-2px); filter:brightness(1.07)}
+.gate-err{color:#ed4956; font-size:.85rem; max-width:440px; text-align:center; line-height:1.5}
 
 /* ---------- 상단 바 ---------- */
 header{
@@ -465,11 +472,12 @@ footer{
 <script>
 /* ================= 데이터 ================= */
 let TODAY = new Date('2026-07-06'); // 샘플 모드 기준일 — data.json 로드 시 실제 오늘로 교체
+/* email: Okta 로그인 시 계정 매칭용 (비워두면 Okta 프로필 이름의 힌트 글자로 자동 인식) */
 const MEMBERS = [
-  {id:'sehee', name:'김세희', role:'팀장 · 관리자', color:'#0095f6', admin:true},
-  {id:'jisuk', name:'김지숙', role:'팀원', color:'#8d6cb8', admin:false},
-  {id:'nahyun',name:'김나현', role:'팀원', color:'#d98e4a', admin:false},
-  {id:'junwoo',name:'김준우', role:'팀원', color:'#5aa87c', admin:false},
+  {id:'sehee', name:'김세희', role:'팀장 · 관리자', color:'#0095f6', admin:true,  email:'shkim@saminis.com'},
+  {id:'jisuk', name:'김지숙', role:'팀원', color:'#8d6cb8', admin:false, email:''},
+  {id:'nahyun',name:'김나현', role:'팀원', color:'#d98e4a', admin:false, email:''},
+  {id:'junwoo',name:'김준우', role:'팀원', color:'#5aa87c', admin:false, email:''},
 ];
 
 /* 제목·요약·계정: Notion Bookmark DB 실제 항목 / 상태·담당자·일부 날짜: 샘플 */
@@ -565,12 +573,113 @@ const dataReady = refreshData(true);
 setInterval(()=>refreshData(false), 5*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshData(false); });
 
+/* ================= Okta SSO (선택 설정) =================
+   두 값을 채우면 신원 선택 화면 대신 Okta 로그인을 사용한다.
+   설정 방법: 저장소의 docs/OKTA-SETUP.md 참고. 비워두면 기존 신원 선택 유지. */
+const OKTA_ISSUER    = '';  // 예: 'https://회사도메인.okta.com/oauth2/default'
+const OKTA_CLIENT_ID = '';
+const oktaOn = () => !!(OKTA_ISSUER && OKTA_CLIENT_ID);
+
+const oktaRedirectUri = () => location.origin + location.pathname;
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const randStr = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
+function parseJwt(t){
+  try{
+    let s = t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    s += '='.repeat((4 - s.length % 4) % 4);
+    return JSON.parse(atob(s));
+  }catch(e){ return null; }
+}
+
+async function oktaLogin(){
+  const verifier = randStr(48);
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const state = randStr(16), nonce = randStr(16);
+  sessionStorage.setItem('okta_pkce', JSON.stringify({verifier, state, nonce}));
+  const p = new URLSearchParams({
+    client_id: OKTA_CLIENT_ID, response_type:'code',
+    scope:'openid profile email', redirect_uri: oktaRedirectUri(),
+    state, nonce, code_challenge: challenge, code_challenge_method:'S256',
+  });
+  location.assign(`${OKTA_ISSUER}/v1/authorize?${p}`);
+}
+
+/* 콜백 처리: ?code= 가 있으면 토큰으로 교환. 처리했으면 true */
+async function oktaHandleCallback(){
+  const q = new URLSearchParams(location.search);
+  if(!q.get('code')) return false;
+  const saved = JSON.parse(sessionStorage.getItem('okta_pkce')||'null');
+  history.replaceState(null, '', location.pathname); // 주소창의 code 제거
+  if(!saved || q.get('state')!==saved.state){ oktaFail('로그인 상태가 일치하지 않습니다. 다시 시도해 주세요.'); return true; }
+  try{
+    const r = await fetch(`${OKTA_ISSUER}/v1/token`, {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        grant_type:'authorization_code', client_id: OKTA_CLIENT_ID,
+        code: q.get('code'), redirect_uri: oktaRedirectUri(), code_verifier: saved.verifier,
+      }),
+    });
+    const d = await r.json();
+    if(!r.ok || !d.id_token) throw new Error(d.error_description || d.error || 'HTTP '+r.status);
+    const claims = parseJwt(d.id_token);
+    if(!claims || claims.nonce!==saved.nonce) throw new Error('토큰 검증 실패');
+    sessionStorage.removeItem('okta_pkce');
+    sessionStorage.setItem('okta_session', JSON.stringify({claims, exp: claims.exp}));
+    oktaEnter(claims);
+  }catch(e){ oktaFail('로그인 실패 — ' + e.message); }
+  return true;
+}
+
+/* Okta 계정 → 팀원 매칭: ① email ② 프로필 이름의 힌트 글자 */
+const OKTA_NAME_HINTS = {sehee:'세희', jisuk:'지숙', nahyun:'나현', junwoo:'준우'};
+function memberFromClaims(c){
+  const email = (c.email || c.preferred_username || '').toLowerCase();
+  let m = email && MEMBERS.find(x=>x.email && x.email.toLowerCase()===email);
+  if(!m){ const nm = c.name || ''; m = MEMBERS.find(x=>nm.includes(OKTA_NAME_HINTS[x.id])); }
+  return m || null;
+}
+function oktaEnter(claims){
+  const m = memberFromClaims(claims);
+  if(!m){
+    sessionStorage.removeItem('okta_session');
+    oktaFail(`${claims.email||claims.name||'이 계정'} 은 팀원 목록에 없습니다. 관리자(김세희)에게 문의하세요.`);
+    return;
+  }
+  enter(m.id);
+}
+function oktaFail(msg){
+  $('#gateGrid').innerHTML =
+    `<div class="gate-err" style="grid-column:1/-1">${msg}</div>
+     <button class="okta-btn" style="grid-column:1/-1;justify-self:center" onclick="oktaLogin()">다시 로그인</button>`;
+}
+function logoutOrSwitch(){
+  sessionStorage.removeItem('okta_session');
+  location.reload();
+}
+
 /* ================= 신원 게이트 ================= */
-$('#gateGrid').innerHTML = MEMBERS.map(m=>`
-  <div class="gate-card" tabindex="0" role="button" onclick="enter('${m.id}')" onkeydown="if(event.key==='Enter')enter('${m.id}')">
-    <div class="gate-avatar" style="background:${m.color}">${m.name.slice(1)}</div>
-    <b>${m.name}</b><span class="role">${m.role}</span>
-  </div>`).join('');
+function renderGate(){
+  if(oktaOn()){
+    $('#gate p').textContent = '회사 Okta 계정으로 로그인하세요. 계정에 따라 자동으로 팀원이 인식됩니다.';
+    $('#gateGrid').innerHTML =
+      `<button class="okta-btn" style="grid-column:1/-1;justify-self:center" onclick="oktaLogin()">Okta 로 로그인</button>`;
+    const note = document.querySelector('.gate-note');
+    if(note) note.textContent = '로그인 정보는 이 브라우저 탭에만 유지됩니다.';
+    return;
+  }
+  $('#gateGrid').innerHTML = MEMBERS.map(m=>`
+    <div class="gate-card" tabindex="0" role="button" onclick="enter('${m.id}')" onkeydown="if(event.key==='Enter')enter('${m.id}')">
+      <div class="gate-avatar" style="background:${m.color}">${m.name.slice(1)}</div>
+      <b>${m.name}</b><span class="role">${m.role}</span>
+    </div>`).join('');
+}
+(async function initAuth(){
+  renderGate();
+  if(!oktaOn()) return;
+  if(await oktaHandleCallback()) return;
+  const s = JSON.parse(sessionStorage.getItem('okta_session')||'null');
+  if(s && s.exp*1000 > Date.now()) oktaEnter(s.claims); // 유효한 세션 → 자동 입장
+})();
 
 async function enter(id){
   await dataReady;
@@ -579,7 +688,7 @@ async function enter(id){
   $('#topbar').style.display='flex';
   $('#mainEl').style.display='block';
   $('#footEl').style.display='block';
-  $('#meChip').innerHTML = `<span class="dot" style="background:${me.color}">${me.name.slice(1)}</span>${me.name}<button onclick="location.reload()">변경</button>`;
+  $('#meChip').innerHTML = `<span class="dot" style="background:${me.color}">${me.name.slice(1)}</span>${me.name}<button onclick="logoutOrSwitch()">${oktaOn()?'로그아웃':'변경'}</button>`;
   if(me.admin) $('#adminTab').style.display='';
   $('#boardTitle').textContent = me.name + ' 님의 선택 보드';
   renderAll();
