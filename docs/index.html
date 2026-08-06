@@ -239,6 +239,44 @@ body.dark .badge.expiring{background:#3a1216}
   border:1px solid var(--line); border-radius:7px; padding:.35rem .5rem; font:inherit; font-size:.8rem;
   background:var(--surface); color:var(--ink); cursor:pointer;
 }
+/* 관리자 · 팀원 현황 카드 */
+.adm-team{display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr)); gap:.8rem}
+.adm-card{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:.9rem 1rem}
+.adm-card .head{display:flex; align-items:center; gap:.55rem; margin-bottom:.6rem}
+.adm-card .head .dot{width:26px;height:26px;border-radius:50%;color:#fff;font-weight:700;font-size:.72rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.adm-card .head b{font-size:.88rem}
+.adm-card .head small{display:block;font-size:.68rem;color:var(--ink-faint)}
+.adm-card .line{font-size:.76rem; color:var(--ink-soft); padding:.2rem 0; line-height:1.45; display:flex; gap:.4rem; align-items:baseline}
+.adm-card .line .lb{flex-shrink:0; font-size:.68rem; font-weight:700; color:var(--ink-faint); width:44px}
+.adm-card .line .tt{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.theme-chip{display:inline-flex; align-items:center; gap:.3rem; font-size:.68rem; font-weight:600; padding:.13rem .5rem; border-radius:99px; background:var(--st-unread-bg); color:var(--ink-soft); white-space:nowrap}
+.theme-chip i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+/* 관리자 · 미배정 리스트 */
+.un-group{margin:1rem 0 .2rem; font-size:.74rem; font-weight:700; color:var(--ink-faint); letter-spacing:.03em; display:flex; align-items:center; gap:.6rem}
+.un-group.hot{color:#b42318}
+.un-row{display:flex; gap:1rem; padding:.7rem 0; border-bottom:1px solid var(--line); align-items:flex-start}
+.un-row:last-child{border-bottom:none}
+.un-main{flex:1; min-width:0}
+.un-title{font-size:.85rem; font-weight:600; line-height:1.45}
+.un-title .cat,.un-title .theme-chip{margin-right:.35rem; vertical-align:1px}
+.un-desc{font-size:.75rem; color:var(--ink-faint); margin-top:.25rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.un-meta{font-size:.71rem; color:var(--ink-faint); margin-top:.25rem; display:flex; gap:.8rem; flex-wrap:wrap}
+.un-meta a{color:var(--accent); text-decoration:none; font-weight:600}
+.un-side{display:flex; flex-direction:column; align-items:flex-end; gap:.3rem; flex-shrink:0}
+.age{font-size:.67rem; font-weight:700; padding:.15rem .45rem; border-radius:5px; white-space:nowrap}
+.age.fresh{color:var(--st-done); background:var(--st-done-bg)}
+.age.mid{color:var(--ink-soft); background:var(--st-unread-bg)}
+.age.old{color:var(--st-assigned); background:var(--st-assigned-bg)}
+.age.exp{color:#ed4956; background:#ffe9eb}
+body.dark .age.exp{background:#3a1216}
+.reco{font-size:.67rem; color:var(--ink-faint)}
+.reco b{color:var(--accent)}
+details.section summary{cursor:pointer; font-weight:700; font-size:.95rem; list-style:none; display:flex; justify-content:space-between; align-items:center}
+details.section summary::after{content:'펼치기 ▾'; font-size:.72rem; font-weight:600; color:var(--ink-faint)}
+details[open].section summary::after{content:'접기 ▴'}
+details.section summary small{font-weight:500; font-size:.76rem; color:var(--ink-faint)}
+details.section > *:not(summary){margin-top:.9rem}
+
 table.stats{width:100%; border-collapse:collapse; font-size:.84rem}
 table.stats th{text-align:left; font-size:.72rem; font-weight:600; color:var(--ink-faint); padding:.4rem .6rem; border-bottom:1px solid var(--line); letter-spacing:.03em}
 table.stats td{padding:.55rem .6rem; border-bottom:1px solid var(--line)}
@@ -390,14 +428,20 @@ footer{
 
     <div id="adminBody" style="display:none">
       <h2>관리자</h2>
-      <p class="sub">배정 · 제외 규칙 · 선호도와 처리 이력</p>
+      <p class="sub">팀원 현황 · 배정 · 제외 규칙 · 상세 통계</p>
 
       <div class="notice">
         이 페이지의 통계는 <b>업무 배분 참고용</b>으로만 사용합니다. 선택 이력이 배분에 반영된다는 사실은 팀원에게 고지합니다.
       </div>
 
       <div class="section">
-        <h3>미배정 항목 <small>분류를 보고 담당자를 지정하세요</small></h3>
+        <h3>팀원 현황 <small>지금 뭘 하고 있고, 어떤 테마에 관심 있는지</small></h3>
+        <div class="adm-team" id="admTeam"></div>
+      </div>
+
+      <div class="section">
+        <h3>미배정 항목 <small>급한 것부터 위에 — 추천을 참고해 담당자를 지정하세요</small></h3>
+        <div class="chips" id="admChips" style="margin-bottom:.3rem"></div>
         <div id="assignList"></div>
       </div>
 
@@ -409,8 +453,8 @@ footer{
         <div id="expireList"></div>
       </div>
 
-      <div class="section">
-        <h3>테마 선호도 · 처리 이력 <small>고정 테마 8종 · 샘플 데이터</small></h3>
+      <details class="section">
+        <summary>테마 선호도 · 처리 이력 <small style="margin-left:.6rem">상세 통계 — 필요할 때만 펼쳐 보세요</small></summary>
         <p class="hint" style="margin:0 0 .5rem">팀 전체 — 선택된 건들의 테마 분포</p>
         <div id="teamThemeBar" style="margin-bottom:.5rem"></div>
         <div class="legend" id="themeLegend" style="margin-bottom:1.2rem"></div>
@@ -425,7 +469,7 @@ footer{
           <thead><tr><th>팀원</th><th>테마별 선택 분포</th><th>상위 테마</th><th>분류별 선택 분포</th><th>선택률</th><th>평균 처리 기간</th><th>완료</th></tr></thead>
           <tbody id="statsBody"></tbody>
         </table>
-      </div>
+      </details>
     </div>
   </section>
 </main>
@@ -965,20 +1009,117 @@ function checkPass(){
   if($('#pass').value==='0703'){ adminOpen=true; $('#adminGate').style.display='none'; $('#adminBody').style.display='block'; renderAdmin(); }
   else { toast('접근 코드가 맞지 않습니다'); $('#pass').value=''; }
 }
+/* 팀원별 테마 처리 이력 집계 (관심사 추정 · 배정 추천용) */
+function themeCountsOf(mId){
+  const counts = {};
+  ITEMS.filter(it=>it.who===mId && (it.st==='active'||it.st==='done'))
+       .forEach(it=>{ const th=themeOf(it); counts[th]=(counts[th]||0)+1; });
+  return counts;
+}
+
+function renderAdminTeam(){
+  $('#admTeam').innerHTML = MEMBERS.map(m=>{
+    const act  = ITEMS.filter(it=>it.who===m.id && it.st==='active')
+                      .sort((a,b)=> days(b.sel||b.pub) - days(a.sel||a.pub));
+    const wait = ITEMS.filter(it=>it.who===m.id && it.st==='assigned');
+    const done = ITEMS.filter(it=>it.who===m.id && it.st==='done')
+                      .sort((a,b)=> new Date(b.fin||0) - new Date(a.fin||0));
+    const tops = Object.entries(themeCountsOf(m.id)).sort((a,b)=>b[1]-a[1]).slice(0,2);
+
+    const actLines = act.slice(0,2).map(it=>{
+      const dd = it.sel ? days(it.sel) : 0;
+      return `<div class="line"><span class="lb">진행</span>
+        <span class="badge active${dd>=15?' stale':''}" style="flex-shrink:0">${dd}일째</span>
+        <span class="tt" title="${it.t}">${it.t}</span></div>`;
+    }).join('') + (act.length>2 ? `<div class="line"><span class="lb"></span>외 ${act.length-2}건 진행 중</div>` : '')
+      || `<div class="line"><span class="lb">진행</span><span style="color:var(--ink-faint)">진행 중인 항목 없음</span></div>`;
+
+    const oldestWait = wait.length ? Math.max(...wait.map(it=>days(it.pub))) : 0;
+    const waitLine = `<div class="line"><span class="lb">대기</span>
+      <span>${wait.length ? `배정 ${wait.length}건 대기${oldestWait>7?` <b style="color:var(--st-assigned)">(최장 ${oldestWait}일 방치)</b>`:''}` : '대기 없음'}</span></div>`;
+
+    const doneLine = done.length
+      ? `<div class="line"><span class="lb">완료</span><span class="tt" title="${done[0].t}">${fmt(done[0].fin)} · ${done[0].t}</span></div>`
+      : '';
+
+    const themeLine = `<div class="line" style="flex-wrap:wrap"><span class="lb">관심</span>
+      ${tops.length ? tops.map(([th,n])=>`<span class="theme-chip"><i style="background:${themeColor[th]||'#9a9a9a'}"></i>${th} ${n}</span>`).join(' ')
+                    : '<span style="color:var(--ink-faint)">선택 이력 없음</span>'}</div>`;
+
+    return `<div class="adm-card">
+      <div class="head"><span class="dot" style="background:${m.color}">${m.name.slice(1)}</span>
+        <div><b>${m.name}</b><small>진행 ${act.length} · 대기 ${wait.length} · 완료 ${done.length}</small></div>
+      </div>
+      ${actLines}${waitLine}${doneLine}${themeLine}
+    </div>`;
+  }).join('');
+}
+
+/* 미배정 항목의 신선도 → 그룹/배지 */
+function ageInfo(it){
+  const d = days(it.pub);
+  if(isExpiring(it)) return {k:'exp',   label:`${d}일 경과 · 기준 초과`, group:'🚨 제외 임박 — 지금 배정하거나 보내주세요', order:0, hot:true};
+  if(d<=3)           return {k:'fresh', label: d<=0 ? '오늘' : `${d}일 전`, group:'🆕 최근 3일', order:1};
+  if(d<=7)           return {k:'mid',   label:`${d}일 전`, group:'이번 주', order:2};
+  return              {k:'old',  label:`${d}일 전`, group:'일주일 지남', order:3};
+}
+
+let admCat = '전체';
+function setAdmCat(c){ admCat = c; renderAdmin(); }
+
 function renderAdmin(){
   if(!adminOpen) return;
-  /* 미배정 */
-  const un = ITEMS.filter(it=>it.st==='unread');
-  $('#assignList').innerHTML = un.map(it=>`
-    <div class="assign-row">
-      <span class="cat" data-c="${it.cat}">${it.cat}</span>
-      <span class="t">${it.t}</span>
-      <span class="mono" style="font-size:.72rem;color:var(--ink-faint)">게시 ${fmt(it.pub)}</span>
-      <select onchange="assign('${it.id}', this.value)">
-        <option value="">담당자 지정…</option>
-        ${MEMBERS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
-      </select>
-    </div>`).join('') || '<p class="hint" style="margin:0">미배정 항목이 없습니다.</p>';
+  renderAdminTeam();
+
+  /* 미배정 — 필터 칩 */
+  const cats = ['전체','테스트(비개발자)','조사','테스트(개발자)','코멘트'];
+  $('#admChips').innerHTML = cats.map(c=>
+    `<button class="chip ${admCat===c?'on':''}" onclick="setAdmCat('${c}')">${c}</button>`).join('');
+
+  /* 미배정 — 신선도 그룹 + 풍부한 행 + 담당자 추천 */
+  const themeCounts = {}; MEMBERS.forEach(m=> themeCounts[m.id] = themeCountsOf(m.id));
+  const recoFor = th => {
+    let best=null, bestN=0;
+    MEMBERS.forEach(m=>{ const n = themeCounts[m.id][th]||0; if(n>bestN){best=m; bestN=n;} });
+    return bestN>0 ? best : null;
+  };
+
+  let un = ITEMS.filter(it=>it.st==='unread');
+  if(admCat!=='전체') un = un.filter(it=>it.cat===admCat);
+  un = un.map(it=>({it, age: ageInfo(it)}))
+         .sort((a,b)=> a.age.order - b.age.order || days(a.it.pub) - days(b.it.pub));
+
+  let lastGroup = null;
+  $('#assignList').innerHTML = un.map(({it, age})=>{
+    const th = themeOf(it);
+    const reco = recoFor(th);
+    const header = age.group!==lastGroup
+      ? `<div class="un-group${age.hot?' hot':''}">${age.group}</div>` : '';
+    lastGroup = age.group;
+    return header + `<div class="un-row">
+      <div class="un-main">
+        <div class="un-title">
+          <span class="cat" data-c="${it.cat}">${it.cat}</span>
+          <span class="theme-chip"><i style="background:${themeColor[th]||'#9a9a9a'}"></i>${th}</span>
+          ${it.t}
+        </div>
+        ${it.d ? `<div class="un-desc">${it.d}</div>` : ''}
+        <div class="un-meta">
+          <span class="mono">@${it.acc}</span><span>게시 ${fmt(it.pub)}</span>
+          <a href="${it.url}" target="_blank" rel="noopener">원문 ↗</a>
+          ${it.notionUrl?`<a href="${it.notionUrl}" target="_blank" rel="noopener">노션 ↗</a>`:''}
+        </div>
+      </div>
+      <div class="un-side">
+        <span class="age ${age.k}">${age.label}</span>
+        <select onchange="assign('${it.id}', this.value)">
+          <option value="">담당자 지정…</option>
+          ${MEMBERS.map(m=>`<option value="${m.id}">${m.name}${reco&&reco.id===m.id?' ⭐':''}</option>`).join('')}
+        </select>
+        ${reco?`<span class="reco">이 테마 최다 처리: <b>${reco.name}</b></span>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<p class="hint" style="margin:0">미배정 항목이 없습니다.</p>';
 
   /* 제외 예정 */
   const ex = ITEMS.filter(isExpiring);
