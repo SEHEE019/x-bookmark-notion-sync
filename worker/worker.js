@@ -95,7 +95,8 @@ export default {
     if (!pageId || !/^[0-9a-f]{32}$|^[0-9a-f-]{36}$/i.test(pageId))
       return json({ error: "잘못된 pageId" }, 400);
 
-    const today = new Date().toISOString().slice(0, 10);
+    // Worker 는 UTC 로 돌므로 한국시간(KST) 날짜로 기록한다 (오전 9시 이전 하루 밀림 방지)
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     let properties;
 
     if (action === "pick") {

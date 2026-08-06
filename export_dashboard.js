@@ -69,7 +69,8 @@ function mapPage(page) {
   return {
     id: page.id,
     t: text(P["제목"]),
-    d: text(P["내용"]).slice(0, 160),
+    // 카드 뒷면에서 상세를 읽을 수 있어야 하므로 넉넉히 담는다 (목록 카드는 CSS 로 4줄까지만 표시)
+    d: text(P["내용"]).slice(0, 700),
     cat: selectOf(P["분류"]) || "조사",
     th: selectOf(P["테마"]) || "기타",
     acc: text(P["계정"]),

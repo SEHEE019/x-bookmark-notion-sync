@@ -136,7 +136,10 @@ h2{font-size:1.15rem; font-weight:700; letter-spacing:-.02em; margin-bottom:.35r
 body.dark .badge.active.stale{background:#3a1216}
 body.dark .badge.expiring{background:#3a1216}
 .card h3{font-size:calc(.95rem * var(--card-scale)); font-weight:600; line-height:1.4; letter-spacing:-.01em}
-.card .desc{font-size:calc(.82rem * var(--card-scale)); color:var(--ink-soft); line-height:1.55; flex:1}
+.card .desc{
+  font-size:calc(.82rem * var(--card-scale)); color:var(--ink-soft); line-height:1.55; flex:1;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden;
+}
 .card .meta{display:flex; flex-wrap:wrap; gap:.4rem .9rem; font-size:.74rem; color:var(--ink-faint)}
 .card .meta a{color:var(--accent); text-decoration:none; font-weight:600}
 .card .meta a:hover{text-decoration:underline}
@@ -161,6 +164,66 @@ body.dark .badge.expiring{background:#3a1216}
   padding:.35rem .9rem; font:inherit; font-size:.8rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
 }
 .chip.on{border-color:var(--accent); color:var(--accent); background:var(--accent-soft)}
+
+/* ---------- 선택 보드 · 카드 덱 ---------- */
+.board-top{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.6rem; margin-bottom:.6rem}
+.goal-chip{
+  font-size:.78rem; font-weight:700; padding:.35rem .8rem; border-radius:99px;
+  background:var(--st-assigned-bg); color:var(--st-assigned); white-space:nowrap;
+}
+.goal-chip.done{background:var(--st-done-bg); color:var(--st-done)}
+/* 아래쪽 여백은 뒤에 겹친 카드(deck-ghost)가 안내문을 가리지 않도록 확보한 값 */
+.deck-wrap{display:flex; align-items:center; justify-content:center; gap:1.3rem; margin:1.5rem 0 3.2rem; flex-wrap:wrap}
+.deck-stack{position:relative; width:min(440px, 86vw); height:min(480px, 60vh); flex-shrink:0}
+.deck-ghost{
+  position:absolute; inset:0; border-radius:20px; background:var(--surface);
+  border:1px solid var(--line); box-shadow:0 8px 24px rgba(0,0,0,.06);
+}
+.deck-ghost.g1{transform:scale(.955) translateY(26px); opacity:.7}
+.deck-ghost.g2{transform:scale(.91) translateY(48px); opacity:.4}
+.deck-card{position:absolute; inset:0; cursor:pointer; perspective:1400px; touch-action:pan-y; transition:transform .25s ease, opacity .25s ease}
+.deck-card.fly-left{transform:translateX(-130%) rotate(-15deg)!important; opacity:0; transition:transform .22s ease-in, opacity .22s ease-in}
+.deck-card.fly-right{transform:translateX(130%) rotate(15deg)!important; opacity:0; transition:transform .22s ease-in, opacity .22s ease-in}
+.dc-inner{position:absolute; inset:0; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.3,1.4,.4,1)}
+.deck-card.flipped .dc-inner{transform:rotateY(180deg)}
+.dc-face{
+  position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  background:var(--surface); border:1px solid var(--line); border-radius:20px;
+  box-shadow:0 16px 44px rgba(0,0,0,.12); padding:1.6rem 1.5rem;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.dc-back{transform:rotateY(180deg)}
+.dc-chips{display:flex; gap:.45rem; flex-wrap:wrap; margin-bottom:1rem}
+.dc-front h3{font-size:1.32rem; font-weight:800; line-height:1.45; letter-spacing:-.02em; flex:1; overflow:hidden; display:flex; align-items:center}
+.dc-meta{font-size:.8rem; color:var(--ink-faint); display:flex; gap:.9rem; flex-wrap:wrap; margin-top:1rem}
+.dc-flip-hint{margin-top:.9rem; font-size:.74rem; font-weight:600; color:var(--accent); text-align:center}
+.dc-back h4{font-size:.95rem; font-weight:700; line-height:1.5; margin-bottom:.7rem}
+.dc-back .dc-desc{flex:1; font-size:.88rem; line-height:1.7; color:var(--ink-soft); overflow-y:auto; white-space:pre-wrap}
+.dc-back .dc-links{display:flex; gap:1rem; margin-top:.9rem}
+.dc-back .dc-links a{color:var(--accent); font-size:.84rem; font-weight:700; text-decoration:none}
+.deck-btn{
+  width:74px; height:74px; border-radius:50%; border:2px solid var(--line); background:var(--surface);
+  font:inherit; font-size:.72rem; font-weight:800; cursor:pointer; color:var(--ink-soft);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.1rem;
+  box-shadow:0 6px 18px rgba(0,0,0,.08); transition:transform .15s, border-color .15s;
+  flex-shrink:0;
+}
+.deck-btn i{font-style:normal; font-size:1.3rem}
+.deck-btn:hover{transform:scale(1.08)}
+.deck-btn.skip:hover{border-color:var(--ink-faint)}
+.deck-btn.pick{border-color:var(--accent); color:var(--accent)}
+.deck-btn.pick:hover{background:var(--accent); color:#fff}
+.deck-hint{text-align:center; font-size:.75rem; color:var(--ink-faint); margin-bottom:1.2rem}
+.deck-empty{
+  border:1.5px dashed var(--line); border-radius:var(--radius); padding:2.6rem 1.5rem;
+  text-align:center; color:var(--ink-soft); font-size:.92rem; margin:1.4rem 0; line-height:1.7;
+}
+.deck-empty .pick-btn{display:inline-block; margin-top:.8rem; text-decoration:none; padding:.6rem 1.4rem}
+@media(max-width:640px){
+  .deck-wrap{gap:.9rem}
+  .deck-stack{order:-1; width:92vw}
+  .deck-btn{width:64px;height:64px}
+}
 
 /* ---------- 룰렛 ---------- */
 .roulette-wrap{display:flex; gap:2.2rem; flex-wrap:wrap; align-items:flex-start; margin-top:.5rem}
@@ -388,8 +451,15 @@ footer{
   <!-- ===== 내 선택 보드 ===== -->
   <section class="view on" id="v-board">
     <h2 id="boardTitle">내 선택 보드</h2>
-    <p class="sub">관리자가 배정한 항목입니다. 하고 싶은 건을 선택하면 상태가 <b>진행</b>으로 바뀌고 선택일이 기록됩니다.</p>
-    <div class="chips" id="boardChips"></div>
+    <p class="sub" id="boardSub">배정된 소식이 한 장씩 카드로 나옵니다. 카드를 누르면 뒤집혀 상세가 보이고, 마음에 들면 오른쪽으로 보내세요.</p>
+    <div class="board-top">
+      <div class="chips" id="boardChips" style="margin-bottom:0"></div>
+      <div style="display:flex; gap:.5rem; align-items:center">
+        <span class="goal-chip" id="goalChip"></span>
+        <button class="chip" id="modeToggle" onclick="toggleBoardMode()">☰ 목록으로</button>
+      </div>
+    </div>
+    <div id="deckArea"></div>
     <div class="cards" id="boardCards"></div>
 
     <h2 style="margin-top:2.4rem">진행 중인 내 항목</h2>
@@ -558,7 +628,11 @@ const themeColor = {}; THEMES.forEach((th,i)=> themeColor[th]=THEME_COLORS[i]);
 const themeOf = it => it.th || '관점·칼럼';
 function themePalette(){ return THEMES; }
 const member = id => MEMBERS.find(m=>m.id===id);
-const days = d => Math.floor((TODAY - new Date(d)) / 86400000);
+/* 날짜는 한국시간(로컬) 기준으로 다룬다. toISOString 은 UTC 로 바꿔 하루가 밀리므로 쓰지 않는다. */
+const isoLocal = (d=new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const dayStart = v => { const x = new Date(v); x.setHours(0,0,0,0); return x; };
+const days = d => Math.round((TODAY - dayStart(d)) / 86400000);
 const limitOf = cat => cat==='코멘트' ? RULE.코멘트 : cat==='조사' ? RULE.조사 : RULE.테스트;
 const isExpiring = it => (it.st==='unread'||it.st==='assigned') && days(it.pub) > limitOf(it.cat);
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2400); }
@@ -829,17 +903,52 @@ function renderTeam(){
 function toggleMember(id){ expandedMember = expandedMember===id ? null : id; renderTeam(); }
 
 /* ================= 선택 보드 ================= */
+let boardMode = localStorage.getItem('boardMode') || 'deck'; // 'deck' | 'list'
+let deckIndex = 0, deckFlipped = false;
+
+function toggleBoardMode(){
+  boardMode = boardMode==='deck' ? 'list' : 'deck';
+  localStorage.setItem('boardMode', boardMode);
+  deckFlipped = false;
+  renderBoard();
+}
+function deckItems(){
+  let list = ITEMS.filter(it=>it.who===me.id && it.st==='assigned');
+  if(catFilter!=='전체') list = list.filter(it=>it.cat===catFilter);
+  return list;
+}
+function todayPickCount(){
+  const t = isoLocal(TODAY);
+  return ITEMS.filter(it=>it.who===me.id && it.sel===t).length;
+}
+
 function renderBoard(){
   const cats=['전체','테스트(비개발자)','조사','테스트(개발자)','코멘트'];
   $('#boardChips').innerHTML = cats.map(c=>`<button class="chip ${catFilter===c?'on':''}" onclick="setCat('${c}')">${c}</button>`).join('');
-  let list = ITEMS.filter(it=>it.who===me.id && it.st==='assigned');
-  if(catFilter!=='전체') list = list.filter(it=>it.cat===catFilter);
-  const readOnly = it => !WORKER_URL && it.notionUrl; // A안: 실데이터 조회 전용 모드
-  $('#boardCards').innerHTML = list.map(it=>
-    cardHTML(it, readOnly(it)
-      ? `<a class="pick-btn" style="display:block;text-align:center;text-decoration:none" href="${it.notionUrl}" target="_blank" rel="noopener">노션에서 선택 처리 ↗</a>`
-      : `<button class="pick-btn" onclick="pick('${it.id}')">이 건 선택하기</button>`)
-  ).join('') || `<div class="empty">배정된 항목이 없습니다. 관리자 배정을 기다리는 중입니다.</div>`;
+
+  const n = todayPickCount();
+  const goal = $('#goalChip');
+  goal.textContent = n>=3 ? `오늘 선택 ${n}/3 달성 🎉` : `오늘 선택 ${n}/3`;
+  goal.classList.toggle('done', n>=3);
+  $('#modeToggle').textContent = boardMode==='deck' ? '☰ 목록으로' : '🃏 카드로';
+  $('#boardSub').textContent = boardMode==='deck'
+    ? '배정된 소식이 한 장씩 카드로 나옵니다. 카드를 누르면 뒤집혀 상세가 보이고, 마음에 들면 오른쪽으로 보내세요.'
+    : '관리자가 배정한 항목입니다. 하고 싶은 건을 선택하면 상태가 진행으로 바뀌고 선택일이 기록됩니다.';
+
+  const readOnly = it => !WORKER_URL && it.notionUrl; // 실데이터 조회 전용 모드
+  if(boardMode==='deck'){
+    $('#boardCards').style.display='none'; $('#boardCards').innerHTML='';
+    $('#deckArea').style.display=''; renderDeck();
+  }else{
+    $('#deckArea').style.display='none'; $('#deckArea').innerHTML='';
+    $('#boardCards').style.display='';
+    const list = deckItems();
+    $('#boardCards').innerHTML = list.map(it=>
+      cardHTML(it, readOnly(it)
+        ? `<a class="pick-btn" style="display:block;text-align:center;text-decoration:none" href="${it.notionUrl}" target="_blank" rel="noopener">노션에서 선택 처리 ↗</a>`
+        : `<button class="pick-btn" onclick="pick('${it.id}')">이 건 선택하기</button>`)
+    ).join('') || `<div class="empty">배정된 항목이 없습니다. 관리자 배정을 기다리는 중입니다.</div>`;
+  }
 
   const act = ITEMS.filter(it=>it.who===me.id && it.st==='active');
   $('#myActiveCards').innerHTML = act.map(it=>
@@ -848,7 +957,112 @@ function renderBoard(){
       : `<button class="pick-btn done-btn" onclick="finish('${it.id}')">처리 완료</button>`)
   ).join('') || `<div class="empty">진행 중인 항목이 없습니다.</div>`;
 }
-function setCat(c){ catFilter=c; renderBoard(); }
+function setCat(c){ catFilter=c; deckIndex=0; deckFlipped=false; renderBoard(); }
+
+/* ---- 카드 덱 렌더 ---- */
+function renderDeck(){
+  const items = deckItems();
+  if(!items.length){
+    $('#deckArea').innerHTML = `<div class="deck-empty">배정된 소식이 없어요 🙌<br>
+      룰렛을 돌려 새 소식을 배정받아 보세요.<br>
+      <a class="pick-btn" href="#" onclick="document.querySelector('nav button[data-v=roulette]').click();return false">🎡 룰렛으로 배정받기</a></div>`;
+    return;
+  }
+  if(deckIndex >= items.length) deckIndex = 0;
+  const it = items[deckIndex];
+  const th = themeOf(it);
+  const chips = `<span class="cat" data-c="${it.cat}">${it.cat}</span>
+    <span class="theme-chip"><i style="background:${themeColor[th]||'#9a9a9a'}"></i>${th}</span>`;
+  const ghosts = (items.length>2?'<div class="deck-ghost g2"></div>':'') + (items.length>1?'<div class="deck-ghost g1"></div>':'');
+
+  $('#deckArea').innerHTML = `
+    <div class="deck-wrap">
+      <button class="deck-btn skip" onclick="deckSkip()" aria-label="다음에 보기"><i>↺</i>다음에</button>
+      <div class="deck-stack">${ghosts}
+        <div class="deck-card${deckFlipped?' flipped':''}" id="deckTop">
+          <div class="dc-inner">
+            <div class="dc-face dc-front">
+              <div class="dc-chips">${chips}</div>
+              <h3>${it.t}</h3>
+              <div class="dc-meta"><span class="mono">@${it.acc}</span><span>게시 ${fmt(it.pub)}</span></div>
+              <div class="dc-flip-hint">카드를 누르면 상세가 보여요 ↻</div>
+            </div>
+            <div class="dc-face dc-back">
+              <div class="dc-chips">${chips}</div>
+              <h4>${it.t}</h4>
+              <div class="dc-desc">${it.d || '(내용 없음)'}</div>
+              <div class="dc-links">
+                <a href="${it.url}" target="_blank" rel="noopener">원문 보기 ↗</a>
+                ${it.notionUrl?`<a href="${it.notionUrl}" target="_blank" rel="noopener">노션 ↗</a>`:''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="deck-btn pick" onclick="deckPick()" aria-label="이 소식 선택"><i>✓</i>할래요</button>
+    </div>
+    <p class="deck-hint">${deckIndex+1} / ${items.length}장 대기 중 · 좌우 스와이프나 ← → 키로도 넘길 수 있어요</p>`;
+
+  const top = $('#deckTop');
+  top.addEventListener('click', ()=>{ if(top._noClick){ top._noClick=false; return; } deckFlipped=!deckFlipped; top.classList.toggle('flipped', deckFlipped); });
+  attachDeckDrag(top);
+}
+
+function deckSkip(){
+  const items = deckItems();
+  if(items.length < 2){ toast('이 카드뿐이에요 — 뒤집어서 살펴보세요!'); resetDeckCard(); return; }
+  const c = $('#deckTop');
+  if(c) c.classList.add('fly-left');
+  setTimeout(()=>{ deckIndex=(deckIndex+1)%items.length; deckFlipped=false; renderDeck(); }, 210);
+}
+function deckPick(){
+  const items = deckItems();
+  if(!items.length) return;
+  const it = items[deckIndex % items.length];
+  const c = $('#deckTop');
+  if(c) c.classList.add('fly-right');
+  setTimeout(()=>{ deckFlipped=false; pick(it.id); }, 210); // pick → renderAll → 덱 갱신
+}
+function resetDeckCard(){ const c=$('#deckTop'); if(c){ c.style.transform=''; } }
+
+/* 스와이프 (포인터 드래그) */
+function attachDeckDrag(el){
+  let sx=null, moved=false;
+  el.addEventListener('pointerdown', e=>{
+    if(e.target.closest('a')) return;
+    sx=e.clientX; moved=false;
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e=>{
+    if(sx===null) return;
+    const dx = e.clientX - sx;
+    if(Math.abs(dx)>8) moved=true;
+    el.style.transition='none';
+    el.style.transform=`translateX(${dx}px) rotate(${dx/22}deg)`;
+  });
+  const up = e=>{
+    if(sx===null) return;
+    const dx = e.clientX - sx; sx=null;
+    el.style.transition='';
+    el._noClick = moved;
+    if(dx > 100){ el.style.transform=''; deckPick(); }
+    else if(dx < -100){ el.style.transform=''; deckSkip(); }
+    else el.style.transform='';
+  };
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+
+/* 키보드: ← 다음에 / → 선택 / Space 뒤집기 */
+document.addEventListener('keydown', e=>{
+  if(!me || boardMode!=='deck') return;
+  if(!document.getElementById('v-board').classList.contains('on')) return;
+  const ae = document.activeElement;
+  if(ae && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
+  if(e.key==='ArrowRight') deckPick();
+  else if(e.key==='ArrowLeft') deckSkip();
+  else if(e.key===' '){ e.preventDefault(); const c=$('#deckTop'); if(c){ deckFlipped=!deckFlipped; c.classList.toggle('flipped', deckFlipped); } }
+});
 async function writeNotion(pageId, action, who){
   if(!WORKER_URL) return {ok:true, local:true}; // Worker 미설정 → 화면만 변경(샘플 모드)
   try{
@@ -863,7 +1077,7 @@ async function pick(id){
   const it = ITEMS.find(i=>i.id==id);
   const res = await writeNotion(it.id, 'pick');
   if(res.error){ toast('노션 기록 실패 — 잠시 후 다시 시도해 주세요'); return; }
-  touchLocal(it, {st:'active', sel: TODAY.toISOString().slice(0,10)});
+  touchLocal(it, {st:'active', sel: isoLocal(TODAY)});
   toast(res.local ? `선택했습니다 (화면만 · 샘플 모드)` : `선택했습니다 — 노션에 '진행'과 선택일이 기록됐습니다`);
   renderAll();
 }
@@ -871,7 +1085,7 @@ async function finish(id){
   const it = ITEMS.find(i=>i.id==id);
   const res = await writeNotion(it.id, 'finish');
   if(res.error){ toast('노션 기록 실패 — 잠시 후 다시 시도해 주세요'); return; }
-  touchLocal(it, {st:'done', fin: TODAY.toISOString().slice(0,10)});
+  touchLocal(it, {st:'done', fin: isoLocal(TODAY)});
   toast(res.local ? `완료 처리했습니다 (화면만 · 샘플 모드)` : `완료! 노션에 완료일이 기록됐습니다`);
   renderAll();
 }
