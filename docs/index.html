@@ -576,8 +576,8 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 /* ================= Okta SSO (선택 설정) =================
    두 값을 채우면 신원 선택 화면 대신 Okta 로그인을 사용한다.
    설정 방법: 저장소의 docs/OKTA-SETUP.md 참고. 비워두면 기존 신원 선택 유지. */
-const OKTA_ISSUER    = '';  // 예: 'https://회사도메인.okta.com/oauth2/default'
-const OKTA_CLIENT_ID = '';
+const OKTA_ISSUER    = 'https://integrator-1735287.okta.com/oauth2/default';
+const OKTA_CLIENT_ID = '0oa162f97nkZeteuQ698';
 const oktaOn = () => !!(OKTA_ISSUER && OKTA_CLIENT_ID);
 
 const oktaRedirectUri = () => location.origin + location.pathname;
@@ -587,7 +587,8 @@ function parseJwt(t){
   try{
     let s = t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
     s += '='.repeat((4 - s.length % 4) % 4);
-    return JSON.parse(atob(s));
+    const bytes = Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes)); // 한글 이름 UTF-8 처리
   }catch(e){ return null; }
 }
 
